@@ -366,12 +366,13 @@ function Questionnaire({ onComplete, C }) {
 }
 
 // ─── GENERATING SCREEN ───
-function GeneratingScreen({ onDone, C }) {
+function GeneratingScreen({ C }) {
   const [step, setStep] = useState(0);
   const steps = ["Analyzing your stats...", "Calculating BMR & TDEE...", "Building workout splits...",
-    "Selecting exercises for your injuries...", "Computing macros & nutrition...", "Finalizing your program..."];
+    "Selecting exercises for your injuries...", "Computing macros & nutrition...", "Generating with AI...",
+    "Personalizing your program...", "Almost there..."];
   useEffect(() => {
-    const t = setInterval(() => setStep(p => { if (p >= steps.length - 1) { clearInterval(t); setTimeout(onDone, 600); return p; } return p + 1; }), 700);
+    const t = setInterval(() => setStep(p => (p + 1) % steps.length), 800);
     return () => clearInterval(t);
   }, []);
   return (
@@ -1483,7 +1484,9 @@ export default function App() {
       });
     }
 
-    window.__pendingProgram = prog;
+    // Program is ready — set it directly and switch to app
+    setProgram(prog);
+    setScreen("app");
   };
 
   const handleReset = async () => {
@@ -1504,7 +1507,7 @@ export default function App() {
   if (screen === "loading") return <div style={{ minHeight: "100vh", background: C.bg, display: "flex", alignItems: "center", justifyContent: "center" }}><div style={{ color: C.sub }}>Loading...</div></div>;
   if (screen === "welcome") return <WelcomeScreen onStart={() => setScreen("questionnaire")} C={C} />;
   if (screen === "questionnaire") return <Questionnaire onComplete={handleComplete} C={C} />;
-  if (screen === "generating") return <GeneratingScreen onDone={() => { if (window.__pendingProgram) { setProgram(window.__pendingProgram); window.__pendingProgram = null; } setScreen("app"); }} C={C} />;
+  if (screen === "generating") return <GeneratingScreen C={C} />;
 
   if (!program) return null;
 
