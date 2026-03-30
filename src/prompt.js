@@ -26,11 +26,11 @@ The JSON must match this EXACT structure:
 CRITICAL RULES:
 
 SPLIT DESIGN (based on training days):
-- 2 days → Upper / Lower
-- 3 days → Push / Pull / Legs
-- 4 days → Upper A (Strength) / Lower A / Upper B (Hypertrophy) / Lower B
-- 5 days → Push / Pull / Legs / Upper / Lower
-- 6 days → Push / Pull / Legs / Push B / Pull B / Legs B (B days use different rep ranges)
+- 2 days: Upper / Lower
+- 3 days: Push / Pull / Legs
+- 4 days: Upper A (Strength) / Lower A / Upper B (Hypertrophy) / Lower B
+- 5 days: Push / Pull / Legs / Upper / Lower
+- 6 days: Push / Pull / Legs / Push B / Pull B / Legs B (B days use different rep ranges)
 
 EXERCISE SELECTION:
 - Each split should have 5-7 exercises
@@ -73,29 +73,33 @@ export function buildUserMessage(ans) {
   const actMult = { "Sedentary": 1.2, "Lightly Active": 1.375, "Moderately Active": 1.55, "Very Active": 1.725 };
   const tdee = Math.round(bmr * (actMult[ans.activity] || 1.55));
   const days = parseInt(ans.days) || 3;
+  const injuries = (ans.injuries || ["None"]).join(", ");
+  const gymAccess = ans.gym_access || "Full Gym";
+  const gymDays = (ans.gym_days || []).join(", ") || "Not specified";
+  const splitDesc = days <= 2 ? "2 splits (Upper/Lower)" : days <= 3 ? "3 splits (Push/Pull/Legs)" : days === 4 ? "4 splits (Upper A/Lower A/Upper B/Lower B)" : days === 5 ? "5 splits (Push/Pull/Legs/Upper/Lower)" : "6 splits (Push/Pull/Legs/Push B/Pull B/Legs B)";
 
-  return \`Generate a personalized workout program for this client. Return ONLY the JSON.
+  return `Generate a personalized workout program for this client. Return ONLY the JSON.
 
 CLIENT PROFILE:
-- Name: \${ans.name || "User"}
-- Age: \${age}
-- Sex: \${ans.sex || "Male"}
-- Weight: \${weight} \${isMetric ? "kg" : "lbs"}
-- Height: \${Math.floor(h_in/12)}'\${Math.round(h_in%12)}" (\${Math.round(hCm)} cm)
-- BMR: \${Math.round(bmr)} cal
-- TDEE: \${tdee} cal
+- Name: ${ans.name || "User"}
+- Age: ${age}
+- Sex: ${ans.sex || "Male"}
+- Weight: ${weight} ${isMetric ? "kg" : "lbs"}
+- Height: ${Math.floor(h_in/12)}'${Math.round(h_in%12)}" (${Math.round(hCm)} cm)
+- BMR: ${Math.round(bmr)} cal
+- TDEE: ${tdee} cal
 
 TRAINING:
-- Goal: \${ans.goal || "Build Muscle"}
-- Experience: \${ans.experience || "< 6 months"}
-- Activity Level: \${ans.activity || "Moderately Active"}
-- Training Days: \${days}/week
-- Gym Days: \${(ans.gym_days || []).join(", ") || "Not specified"}
-- Preferred Time: \${ans.time_pref || "No Preference"}
+- Goal: ${ans.goal || "Build Muscle"}
+- Experience: ${ans.experience || "< 6 months"}
+- Activity Level: ${ans.activity || "Moderately Active"}
+- Training Days: ${days}/week
+- Gym Days: ${gymDays}
+- Preferred Time: ${ans.time_pref || "No Preference"}
 
-INJURIES: \${(ans.injuries || ["None"]).join(", ")}
+INJURIES: ${injuries}
 
-EQUIPMENT: \${ans.gym_access || "Full Gym"}
+EQUIPMENT: ${gymAccess}
 
-Generate \${days <= 2 ? "2 splits (Upper/Lower)" : days <= 3 ? "3 splits (Push/Pull/Legs)" : days === 4 ? "4 splits (Upper A/Lower A/Upper B/Lower B)" : days === 5 ? "5 splits (Push/Pull/Legs/Upper/Lower)" : "6 splits (Push/Pull/Legs/Push B/Pull B/Legs B)"} with 5-7 exercises each.\`;
+Generate ${splitDesc} with 5-7 exercises each.`;
 }
