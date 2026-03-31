@@ -177,6 +177,8 @@ const QUESTIONS = [
   { id:"height", label:"Height", type:"height" },
   { id:"weight", label:"Current weight", type:"number", placeholder:"Weight" },
   { id:"goal", label:"What's your primary goal?", type:"select", options:["Build Muscle","Lose Fat","Recomposition","Strength","General Fitness"] },
+  { id:"approach", label:"What type of training appeals to you?", type:"select", options:["Traditional Gym (barbells, dumbbells, machines)","Machine-Based (guided, joint-friendly)","Functional Fitness (bodyweight, kettlebells, bands)","Group Class Style (circuits, timed intervals)","Home Workouts (minimal equipment)"], note:"This shapes your exercise selection" },
+  { id:"comfort", label:"How comfortable are you with free weights?", type:"select", options:["Very comfortable — I know my way around","Somewhat — I've used them but want guidance","Not very — I prefer machines or bodyweight","Never used them — start me on machines"], note:"We'll match exercises to your comfort level" },
   { id:"experience", label:"Training experience?", type:"select", options:["Complete Beginner","< 6 months","6-12 months","1-3 years","3+ years"] },
   { id:"activity", label:"Daily activity level?", type:"select", options:["Sedentary","Lightly Active","Moderately Active","Very Active"] },
   { id:"injuries", label:"Any injuries or limitations?", type:"multi", options:["Back/Spine","Shoulder","Knee","Hip","Wrist/Elbow","None"] },
@@ -488,6 +490,36 @@ function WorkoutTab({ program, workoutLogs, setWorkoutLogs, onTimer, C }) {
   const doneSets = Object.values(setData).filter(s => s?.done).length;
   const pct = totalSets > 0 ? Math.round((doneSets / totalSets) * 100) : 0;
 
+  // Estimated calories burned (rough: ~5-8 cal per set for resistance training)
+  const estCalsBurned = doneSets * 7;
+
+  // Previous session comparison
+  const prevSessionKey = Object.keys(workoutLogs).filter(k => k.endsWith(`-${split.name}`) && k !== logKey).sort().reverse()[0];
+  const prevSession = prevSessionKey ? workoutLogs[prevSessionKey] : null;
+  const prevDate = prevSessionKey ? prevSessionKey.split("-").slice(0,3).join("-") : null;
+
+  // Warmup based on injury profile
+  const warmupExercises = program.hasBack
+    ? [{ name: "Dead Bugs", detail: "2 × 10 each side", cue: "Press lower back into floor" },
+       { name: "Bird Dogs", detail: "2 × 10 each side", cue: "Keep hips level, reach long" },
+       { name: "Cat-Cow", detail: "2 × 10 reps", cue: "Inhale cow, exhale cat" }]
+    : program.hasShoulder
+    ? [{ name: "Band Pull-Aparts", detail: "2 × 15", cue: "Chest height, squeeze blades" },
+       { name: "External Rotations", detail: "2 × 12 each", cue: "Elbow at 90°, rotate out" },
+       { name: "Arm Circles", detail: "1 × 10 each direction", cue: "Small to large" }]
+    : [{ name: "Jumping Jacks", detail: "1 × 30 seconds", cue: "Get heart rate up" },
+       { name: "Arm Circles", detail: "1 × 10 each direction", cue: "Loosen shoulders" },
+       { name: "Bodyweight Squats", detail: "1 × 15", cue: "Open hips, chest up" }];
+
+  const [warmupDone, setWarmupDone] = useState({});
+  const [showNotes, setShowNotes] = useState(false);
+  const [sessionNotes, setSessionNotes] = useState(setData._notes || "");
+
+  const saveNotes = () => {
+    const updated = { ...workoutLogs, [logKey]: { ...setData, _notes: sessionNotes } };
+    setWorkoutLogs(updated);
+  };
+
   return (
     <div style={{ padding: "12px 16px 100px" }}>
       {/* Today's workout header */}
@@ -506,6 +538,47 @@ function WorkoutTab({ program, workoutLogs, setWorkoutLogs, onTimer, C }) {
         <div style={{ height: 6, borderRadius: 3, background: C.border }}>
           <div style={{ height: "100%", borderRadius: 3, background: pct === 100 ? C.green : C.accent, width: `${pct}%`, transition: "width 0.3s" }} />
         </div>
+        {doneSets > 0 && (
+          <div style={{ display: "flex", gap: 12, marginTop: 10, fontSize: 11, color: C.sub }}>
+            <span>🔥 ~{estCalsBurned} cal burned</span>
+            <span>✅ {doneSets}/{totalSets} sets</span>
+          </div>
+        )}
+      </div>
+
+      {/* Previous session comparison */}
+      {prevSession && (
+        <div style={{ background: C.cardAlt, borderRadius: 10, padding: 12, border: `1px solid ${C.border}`, marginBottom: 12 }}>
+          <div style={{ fontSize: 11, color: C.sub, fontWeight: 600, marginBottom: 4 }}>📊 Last {split.name} Session — {prevDate}</div>
+          <div style={{ fontSize: 12, color: C.text }}>
+            {Object.entries(prevSession).filter(([k,v]) => v?.done && k !== "_notes").length} sets completed
+            {prevSession._notes && <span style={{ color: C.muted }}> • "{prevSession._notes}"</span>}
+          </div>
+        </div>
+      )}
+
+      {/* Warmup section */}
+      <div style={{ background: C.card, borderRadius: 12, border: `1px solid ${C.border}`, marginBottom: 12, overflow: "hidden" }}>
+        <div style={{ padding: "12px 16px", borderBottom: `1px solid ${C.border}` }}>
+          <div style={{ fontSize: 14, fontWeight: 700, color: C.text }}>🔥 Warm-Up</div>
+          <div style={{ fontSize: 11, color: C.sub }}>
+            {program.hasBack ? "Core stability protocol" : "General warm-up"} • {Object.values(warmupDone).filter(Boolean).length}/{warmupExercises.length} done
+          </div>
+        </div>
+        {warmupExercises.map((w, i) => (
+          <button key={i} onClick={() => setWarmupDone(p => ({ ...p, [i]: !p[i] }))}
+            style={{ width: "100%", padding: "10px 16px", display: "flex", alignItems: "center", gap: 10,
+              background: warmupDone[i] ? C.green + "08" : "none", border: "none", borderBottom: i < warmupExercises.length - 1 ? `1px solid ${C.border}` : "none",
+              cursor: "pointer", textAlign: "left" }}>
+            <div style={{ width: 22, height: 22, borderRadius: 6, border: `2px solid ${warmupDone[i] ? C.green : C.border}`,
+              background: warmupDone[i] ? C.green : "transparent", display: "flex", alignItems: "center", justifyContent: "center",
+              color: "#fff", fontSize: 12, flexShrink: 0 }}>{warmupDone[i] ? "✓" : ""}</div>
+            <div style={{ flex: 1 }}>
+              <div style={{ fontSize: 14, fontWeight: 600, color: warmupDone[i] ? C.green : C.text, textDecoration: warmupDone[i] ? "line-through" : "none" }}>{w.name}</div>
+              <div style={{ fontSize: 11, color: C.sub }}>{w.detail} — {w.cue}</div>
+            </div>
+          </button>
+        ))}
       </div>
 
       {/* Exercises */}
@@ -570,6 +643,32 @@ function WorkoutTab({ program, workoutLogs, setWorkoutLogs, onTimer, C }) {
           </div>
         );
       })}
+
+      {/* Session notes */}
+      <div style={{ background: C.card, borderRadius: 12, border: `1px solid ${C.border}`, marginTop: 8, padding: 14 }}>
+        <button onClick={() => setShowNotes(!showNotes)} style={{ width: "100%", background: "none", border: "none", cursor: "pointer",
+          display: "flex", justifyContent: "space-between", alignItems: "center", color: C.text, padding: 0 }}>
+          <span style={{ fontSize: 14, fontWeight: 600 }}>📝 Session Notes</span>
+          <span style={{ color: C.muted, fontSize: 14 }}>{showNotes ? "▴" : "▾"}</span>
+        </button>
+        {showNotes && (
+          <div style={{ marginTop: 10 }}>
+            <textarea value={sessionNotes} onChange={e => setSessionNotes(e.target.value)} placeholder="How did this session feel? Any PRs, struggles, adjustments?"
+              rows={3} style={{ width: "100%", padding: 10, borderRadius: 8, border: `1px solid ${C.inputBorder}`, background: C.inputBg,
+                color: C.text, fontSize: 13, outline: "none", resize: "vertical", fontFamily: "inherit", boxSizing: "border-box" }} />
+            <button onClick={saveNotes} style={{ marginTop: 8, width: "100%", padding: 10, borderRadius: 8, border: "none",
+              background: C.accent, color: "#fff", fontSize: 13, fontWeight: 600, cursor: "pointer" }}>Save Notes</button>
+          </div>
+        )}
+      </div>
+
+      {/* Finish workout summary */}
+      {pct >= 80 && (
+        <div style={{ background: C.green + "12", borderRadius: 12, border: `1px solid ${C.green}30`, padding: 16, marginTop: 12, textAlign: "center" }}>
+          <div style={{ fontSize: 16, fontWeight: 700, color: C.green, marginBottom: 4 }}>💪 Great session!</div>
+          <div style={{ fontSize: 12, color: C.sub }}>{doneSets}/{totalSets} sets • ~{estCalsBurned} calories burned</div>
+        </div>
+      )}
     </div>
   );
 }
@@ -581,7 +680,6 @@ function MealsTab({ program, foodLog, setFoodLog, C }) {
   const [viewDate, setViewDate] = useState(dateKey);
   const [adding, setAdding] = useState(null); // "Breakfast","Lunch","Dinner","Snack"
   const [entry, setEntry] = useState({ name: "", calories: "", protein: "", carbs: "", fat: "" });
-  const [showHistory, setShowHistory] = useState(false);
 
   const viewLog = foodLog[viewDate] || { meals: [] };
   const mealSlots = ["Breakfast", "Lunch", "Dinner", "Snack"];
@@ -612,9 +710,18 @@ function MealsTab({ program, foodLog, setFoodLog, C }) {
 
   const logDates = Object.keys(foodLog).sort().reverse();
 
-  // Smart recommendations
-  const proteinGap = macros.protein - totals.protein;
-  const calGap = macros.calories - totals.calories;
+  // Smart meal progression recommendations
+  const mealSlots = ["Breakfast", "Lunch", "Dinner", "Snack"];
+  const loggedSlots = mealSlots.filter(slot => (foodLog[viewDate]?.meals || []).some(m => m.slot === slot));
+  const nextMeal = mealSlots.find(slot => !loggedSlots.includes(slot) && slot !== "Snack");
+  const hasSnack = loggedSlots.includes("Snack");
+
+  const mealSuggestions = {
+    Breakfast: { icon: "🍳", ideas: ["Eggs + toast + fruit (~400 cal, 25g protein)", "Oatmeal + protein powder + banana (~450 cal, 30g protein)", "Greek yogurt + granola + berries (~350 cal, 20g protein)"] },
+    Lunch: { icon: "🥗", ideas: ["Chicken wrap + veggies (~500 cal, 35g protein)", "Rice bowl + protein + avocado (~550 cal, 30g protein)", "Turkey sandwich + side salad (~450 cal, 28g protein)"] },
+    Dinner: { icon: "🍽️", ideas: ["Salmon + sweet potato + greens (~550 cal, 40g protein)", "Stir-fry with protein + rice (~500 cal, 35g protein)", "Lean steak + roasted veggies (~500 cal, 42g protein)"] },
+  };
+  const snackSuggestions = ["Protein shake (~150 cal, 25g protein)", "Apple + peanut butter (~250 cal, 8g protein)", "Trail mix + jerky (~300 cal, 15g protein)"];
 
   return (
     <div style={{ padding: "12px 16px 100px" }}>
@@ -642,21 +749,35 @@ function MealsTab({ program, foodLog, setFoodLog, C }) {
         </div>
       </div>
 
-      {/* Smart recommendation */}
-      {proteinGap > 20 && (
+      {/* Smart meal recommendation */}
+      {nextMeal && mealSuggestions[nextMeal] && (
         <div style={{ background: C.green + "12", border: `1px solid ${C.green}30`, borderRadius: 10, padding: 12, marginBottom: 12 }}>
-          <div style={{ fontSize: 13, color: C.green, fontWeight: 600, marginBottom: 4 }}>💡 Recommendation</div>
-          <div style={{ fontSize: 12, color: C.sub }}>
-            You're {proteinGap}g short on protein. Try adding: chicken breast (31g/4oz), Greek yogurt (15g/cup), or a protein shake (25-30g).
+          <div style={{ fontSize: 13, color: C.green, fontWeight: 600, marginBottom: 6 }}>{mealSuggestions[nextMeal].icon} Time for {nextMeal}!</div>
+          <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+            {mealSuggestions[nextMeal].ideas.map((idea, i) => (
+              <div key={i} style={{ fontSize: 12, color: C.sub, paddingLeft: 8, borderLeft: `2px solid ${C.green}30` }}>{idea}</div>
+            ))}
           </div>
         </div>
       )}
-      {calGap > 500 && totals.calories > 0 && (
+
+      {/* Snack recommendation alongside meals */}
+      {!hasSnack && loggedSlots.length > 0 && (
         <div style={{ background: C.yellow + "12", border: `1px solid ${C.yellow}30`, borderRadius: 10, padding: 12, marginBottom: 12 }}>
-          <div style={{ fontSize: 13, color: C.yellow, fontWeight: 600, marginBottom: 4 }}>⚡ Heads Up</div>
-          <div style={{ fontSize: 12, color: C.sub }}>
-            You still need ~{calGap} calories to hit your target. Don't skip your last meal!
+          <div style={{ fontSize: 13, color: C.yellow, fontWeight: 600, marginBottom: 6 }}>🍎 Don't forget a snack!</div>
+          <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+            {snackSuggestions.map((s, i) => (
+              <div key={i} style={{ fontSize: 12, color: C.sub, paddingLeft: 8, borderLeft: `2px solid ${C.yellow}30` }}>{s}</div>
+            ))}
           </div>
+        </div>
+      )}
+
+      {/* All meals logged */}
+      {loggedSlots.length >= 3 && !nextMeal && (
+        <div style={{ background: C.accent + "12", border: `1px solid ${C.accent}30`, borderRadius: 10, padding: 12, marginBottom: 12, textAlign: "center" }}>
+          <div style={{ fontSize: 13, color: C.accent, fontWeight: 600 }}>✅ All main meals logged!</div>
+          <div style={{ fontSize: 12, color: C.sub, marginTop: 4 }}>{totals.protein}g / {macros.protein}g protein • {totals.calories} / {macros.calories} cal</div>
         </div>
       )}
 
@@ -710,30 +831,7 @@ function MealsTab({ program, foodLog, setFoodLog, C }) {
         );
       })}
 
-      {/* History toggle */}
-      <button onClick={() => setShowHistory(!showHistory)}
-        style={{ width: "100%", padding: 12, borderRadius: 10, border: `1px solid ${C.border}`, background: C.card,
-          color: C.sub, fontSize: 13, cursor: "pointer", marginTop: 8 }}>
-        {showHistory ? "Hide" : "View"} Meal History
-      </button>
-
-      {showHistory && logDates.length > 0 && (
-        <div style={{ marginTop: 8 }}>
-          {logDates.filter(d => d !== dateKey).slice(0, 7).map(d => {
-            const dayMeals = foodLog[d]?.meals || [];
-            const dayTotals = dayMeals.reduce((a, m) => ({ cal: a.cal + m.calories, prot: a.prot + m.protein }), { cal: 0, prot: 0 });
-            return (
-              <div key={d} style={{ background: C.card, borderRadius: 10, border: `1px solid ${C.border}`, padding: "10px 14px", marginBottom: 6 }}>
-                <div style={{ display: "flex", justifyContent: "space-between" }}>
-                  <span style={{ color: C.text, fontSize: 13, fontWeight: 600 }}>{d}</span>
-                  <span style={{ color: C.sub, fontSize: 12 }}>{dayTotals.cal} cal • {dayTotals.prot}g protein</span>
-                </div>
-                <div style={{ fontSize: 11, color: C.muted, marginTop: 4 }}>{dayMeals.map(m => m.name).join(", ")}</div>
-              </div>
-            );
-          })}
-        </div>
-      )}
+      {/* History moved to Settings tab */}
     </div>
   );
 }
@@ -741,12 +839,16 @@ function MealsTab({ program, foodLog, setFoodLog, C }) {
 // ─── PROGRESS TAB ───
 function ProgressTab({ progressLogs, setProgressLogs, program, workoutLogs, C }) {
   const dateKey = today();
-  const [view, setView] = useState("log"); // log, history, measurements
+  const [view, setView] = useState("log");
   const todayLog = progressLogs[dateKey] || {};
+  const [form, setForm] = useState({ weight: todayLog.weight || "", sleep: todayLog.sleep || "", energy: todayLog.energy || "", soreness: todayLog.soreness || "", notes: todayLog.notes || "" });
+  const [saved, setSaved] = useState(false);
 
-  const updateLog = (field, val) => {
-    const updated = { ...progressLogs, [dateKey]: { ...todayLog, [field]: val, date: dateKey } };
+  const submitLog = () => {
+    const updated = { ...progressLogs, [dateKey]: { ...form, date: dateKey } };
     setProgressLogs(updated);
+    setSaved(true);
+    setTimeout(() => setSaved(false), 2000);
   };
 
   const sortedDates = Object.keys(progressLogs).sort().reverse();
@@ -769,7 +871,7 @@ function ProgressTab({ progressLogs, setProgressLogs, program, workoutLogs, C })
     <div style={{ padding: "12px 16px 100px" }}>
       {/* View toggle */}
       <div style={{ display: "flex", gap: 6, marginBottom: 14 }}>
-        {[["log","Daily Log"],["history","History"],["measurements","Body"]].map(([k,l]) => (
+        {[["log","Daily Log"],["measurements","Body"]].map(([k,l]) => (
           <button key={k} onClick={() => setView(k)} style={{ flex: 1, padding: "8px 0", borderRadius: 8,
             border: `1px solid ${view === k ? C.accent : C.border}`, background: view === k ? C.accent + "18" : C.card,
             color: view === k ? C.accent : C.sub, fontSize: 12, fontWeight: 600, cursor: "pointer" }}>{l}</button>
@@ -782,25 +884,25 @@ function ProgressTab({ progressLogs, setProgressLogs, program, workoutLogs, C })
             <h3 style={{ color: C.text, fontSize: 16, fontWeight: 700, margin: "0 0 14px" }}>Daily Check-In</h3>
 
             <label style={{ fontSize: 13, color: C.sub, marginBottom: 4, display: "block" }}>Weight ({program.units === "metric" ? "kg" : "lbs"})</label>
-            <input type="number" value={todayLog.weight || ""} onChange={e => updateLog("weight", e.target.value)}
+            <input type="number" value={form.weight} onChange={e => setForm(p => ({ ...p, weight: e.target.value }))}
               style={{ width: "100%", padding: 12, borderRadius: 8, border: `1px solid ${C.inputBorder}`, background: C.inputBg,
                 color: C.text, fontSize: 15, outline: "none", marginBottom: 14, boxSizing: "border-box" }} />
 
             <label style={{ fontSize: 13, color: C.sub, marginBottom: 6, display: "block" }}>Sleep (hours)</label>
             <div style={{ display: "flex", gap: 6, marginBottom: 14 }}>
               {["<5","5-6","6-7","7-8","8+"].map(s => (
-                <button key={s} onClick={() => updateLog("sleep", s)} style={{ flex: 1, padding: "8px 0", borderRadius: 8,
-                  border: `1px solid ${todayLog.sleep === s ? C.accent : C.border}`, background: todayLog.sleep === s ? C.accent + "18" : C.card,
-                  color: todayLog.sleep === s ? C.accent : C.sub, fontSize: 12, fontWeight: 600, cursor: "pointer" }}>{s}</button>
+                <button key={s} onClick={() => setForm(p => ({ ...p, sleep: s }))} style={{ flex: 1, padding: "8px 0", borderRadius: 8,
+                  border: `1px solid ${form.sleep === s ? C.accent : C.border}`, background: form.sleep === s ? C.accent + "18" : C.card,
+                  color: form.sleep === s ? C.accent : C.sub, fontSize: 12, fontWeight: 600, cursor: "pointer" }}>{s}</button>
               ))}
             </div>
 
             <label style={{ fontSize: 13, color: C.sub, marginBottom: 6, display: "block" }}>Energy Level</label>
             <div style={{ display: "flex", gap: 6, marginBottom: 14 }}>
               {[["😴","Low"],["😐","OK"],["😊","Good"],["🔥","Great"]].map(([ic,l]) => (
-                <button key={l} onClick={() => updateLog("energy", l)} style={{ flex: 1, padding: "8px 4px", borderRadius: 8,
-                  border: `1px solid ${todayLog.energy === l ? C.accent : C.border}`, background: todayLog.energy === l ? C.accent + "18" : C.card,
-                  color: todayLog.energy === l ? C.accent : C.sub, fontSize: 12, cursor: "pointer", display: "flex", flexDirection: "column",
+                <button key={l} onClick={() => setForm(p => ({ ...p, energy: l }))} style={{ flex: 1, padding: "8px 4px", borderRadius: 8,
+                  border: `1px solid ${form.energy === l ? C.accent : C.border}`, background: form.energy === l ? C.accent + "18" : C.card,
+                  color: form.energy === l ? C.accent : C.sub, fontSize: 12, cursor: "pointer", display: "flex", flexDirection: "column",
                   alignItems: "center", gap: 2 }}><span style={{ fontSize: 16 }}>{ic}</span>{l}</button>
               ))}
             </div>
@@ -808,16 +910,21 @@ function ProgressTab({ progressLogs, setProgressLogs, program, workoutLogs, C })
             <label style={{ fontSize: 13, color: C.sub, marginBottom: 6, display: "block" }}>Soreness</label>
             <div style={{ display: "flex", gap: 6, marginBottom: 14 }}>
               {["None","Mild","Moderate","Severe"].map(s => (
-                <button key={s} onClick={() => updateLog("soreness", s)} style={{ flex: 1, padding: "8px 0", borderRadius: 8,
-                  border: `1px solid ${todayLog.soreness === s ? C.accent : C.border}`, background: todayLog.soreness === s ? C.accent + "18" : C.card,
-                  color: todayLog.soreness === s ? C.accent : C.sub, fontSize: 11, fontWeight: 600, cursor: "pointer" }}>{s}</button>
+                <button key={s} onClick={() => setForm(p => ({ ...p, soreness: s }))} style={{ flex: 1, padding: "8px 0", borderRadius: 8,
+                  border: `1px solid ${form.soreness === s ? C.accent : C.border}`, background: form.soreness === s ? C.accent + "18" : C.card,
+                  color: form.soreness === s ? C.accent : C.sub, fontSize: 11, fontWeight: 600, cursor: "pointer" }}>{s}</button>
               ))}
             </div>
 
             <label style={{ fontSize: 13, color: C.sub, marginBottom: 4, display: "block" }}>Notes</label>
-            <textarea value={todayLog.notes || ""} onChange={e => updateLog("notes", e.target.value)} placeholder="How are you feeling?"
+            <textarea value={form.notes} onChange={e => setForm(p => ({ ...p, notes: e.target.value }))} placeholder="How are you feeling?"
               rows={3} style={{ width: "100%", padding: 10, borderRadius: 8, border: `1px solid ${C.inputBorder}`, background: C.inputBg,
                 color: C.text, fontSize: 13, outline: "none", resize: "vertical", fontFamily: "inherit", boxSizing: "border-box" }} />
+
+            <button onClick={submitLog} style={{ marginTop: 12, width: "100%", padding: 13, borderRadius: 10, border: "none",
+              background: saved ? C.green : C.accent, color: "#fff", fontSize: 14, fontWeight: 700, cursor: "pointer" }}>
+              {saved ? "✓ Saved!" : todayLog.weight ? "Update Today's Log" : "Save Today's Log"}
+            </button>
           </div>
         </>
       )}
@@ -843,24 +950,6 @@ function ProgressTab({ progressLogs, setProgressLogs, program, workoutLogs, C })
               </div>
             </div>
           )}
-          {sortedDates.map(d => {
-            const log = progressLogs[d];
-            return (
-              <div key={d} style={{ background: C.card, borderRadius: 10, border: `1px solid ${C.border}`, padding: "10px 14px", marginBottom: 6 }}>
-                <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4 }}>
-                  <span style={{ color: C.text, fontSize: 13, fontWeight: 600 }}>{d}</span>
-                  {log.weight && <span style={{ color: C.accent, fontSize: 13, fontWeight: 700 }}>{log.weight} {program.units === "metric" ? "kg" : "lbs"}</span>}
-                </div>
-                <div style={{ fontSize: 11, color: C.sub, display: "flex", gap: 10, flexWrap: "wrap" }}>
-                  {log.sleep && <span>😴 {log.sleep}</span>}
-                  {log.energy && <span>⚡ {log.energy}</span>}
-                  {log.soreness && <span>💪 {log.soreness}</span>}
-                </div>
-                {log.notes && <div style={{ fontSize: 12, color: C.muted, marginTop: 4 }}>{log.notes}</div>}
-              </div>
-            );
-          })}
-          {sortedDates.length === 0 && <div style={{ textAlign: "center", color: C.sub, fontSize: 13, padding: 30 }}>No logs yet. Start with today's check-in!</div>}
         </div>
       )}
 
@@ -874,13 +963,17 @@ function ProgressTab({ progressLogs, setProgressLogs, program, workoutLogs, C })
 function MeasurementsView({ progressLogs, setProgressLogs, C }) {
   const dateKey = today();
   const todayLog = progressLogs[dateKey] || {};
-  const meas = todayLog.measurements || {};
+  const existingMeas = todayLog.measurements || {};
   const fields = [["chest","Chest"],["waist","Waist"],["hips","Hips"],["arms","Arms"],["thighs","Thighs"]];
   const [showHistory, setShowHistory] = useState(false);
+  const [measForm, setMeasForm] = useState({ chest: existingMeas.chest || "", waist: existingMeas.waist || "", hips: existingMeas.hips || "", arms: existingMeas.arms || "", thighs: existingMeas.thighs || "" });
+  const [measSaved, setMeasSaved] = useState(false);
 
-  const updateMeas = (field, val) => {
-    const updated = { ...progressLogs, [dateKey]: { ...todayLog, date: dateKey, measurements: { ...meas, [field]: val } } };
+  const submitMeas = () => {
+    const updated = { ...progressLogs, [dateKey]: { ...todayLog, date: dateKey, measurements: measForm } };
     setProgressLogs(updated);
+    setMeasSaved(true);
+    setTimeout(() => setMeasSaved(false), 2000);
   };
 
   // Gather all dates that have measurements
@@ -899,11 +992,15 @@ function MeasurementsView({ progressLogs, setProgressLogs, C }) {
         {fields.map(([k, l]) => (
           <div key={k} style={{ marginBottom: 10 }}>
             <label style={{ fontSize: 13, color: C.sub, marginBottom: 4, display: "block" }}>{l}</label>
-            <input type="number" value={meas[k] || ""} onChange={e => updateMeas(k, e.target.value)}
+            <input type="number" value={measForm[k] || ""} onChange={e => setMeasForm(p => ({ ...p, [k]: e.target.value }))}
               placeholder="optional" style={{ width: "100%", padding: 10, borderRadius: 8, border: `1px solid ${C.inputBorder}`,
                 background: C.inputBg, color: C.text, fontSize: 14, outline: "none", boxSizing: "border-box" }} />
           </div>
         ))}
+        <button onClick={submitMeas} style={{ width: "100%", padding: 13, borderRadius: 10, border: "none",
+          background: measSaved ? C.green : C.accent, color: "#fff", fontSize: 14, fontWeight: 700, cursor: "pointer" }}>
+          {measSaved ? "✓ Saved!" : "Save Measurements"}
+        </button>
       </div>
 
       {/* History toggle */}
@@ -997,11 +1094,12 @@ function ScheduleTab({ program, workoutLogs, C }) {
 }
 
 // ─── SETTINGS TAB ───
-function SettingsTab({ program, setProgram, onReset, workoutLogs, progressLogs, theme, setTheme, C }) {
+function SettingsTab({ program, setProgram, onReset, workoutLogs, progressLogs, foodLog, theme, setTheme, C }) {
   const [editing, setEditing] = useState(false);
   const [editData, setEditData] = useState({});
   const [showPicModal, setShowPicModal] = useState(false);
   const [profilePic, setProfilePic] = useState(null);
+  const [historyView, setHistoryView] = useState(null); // null, "progress", "meals", "workouts"
 
   useEffect(() => { DB.get("profilePic").then(v => v && setProfilePic(v)); }, []);
 
@@ -1188,6 +1286,88 @@ function SettingsTab({ program, setProgram, onReset, workoutLogs, progressLogs, 
         </div>
       </div>
 
+      {/* History Logs */}
+      <div style={{ background: C.card, borderRadius: 14, padding: 16, border: `1px solid ${C.border}`, marginBottom: 12 }}>
+        <h3 style={{ color: C.text, fontSize: 15, fontWeight: 700, margin: "0 0 12px" }}>History & Logs</h3>
+        <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+          {[["progress","📊 Daily Check-In History"],["meals","🍽️ Meal Log History"],["workouts","🏋️ Workout History"]].map(([k,l]) => (
+            <button key={k} onClick={() => setHistoryView(historyView === k ? null : k)}
+              style={{ padding: "12px 14px", borderRadius: 10, border: `1px solid ${historyView === k ? C.accent : C.border}`,
+                background: historyView === k ? C.accent + "12" : C.cardAlt, color: C.text, fontSize: 14, fontWeight: 600,
+                cursor: "pointer", textAlign: "left", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+              <span>{l}</span>
+              <span style={{ color: C.muted, fontSize: 14 }}>{historyView === k ? "▴" : "▾"}</span>
+            </button>
+          ))}
+        </div>
+
+        {/* Progress history */}
+        {historyView === "progress" && (
+          <div style={{ marginTop: 10 }}>
+            {Object.keys(progressLogs).sort().reverse().map(d => {
+              const log = progressLogs[d];
+              return (
+                <div key={d} style={{ background: C.cardAlt, borderRadius: 10, padding: "10px 14px", marginBottom: 6 }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4 }}>
+                    <span style={{ color: C.text, fontSize: 13, fontWeight: 600 }}>{d}</span>
+                    {log.weight && <span style={{ color: C.accent, fontSize: 13, fontWeight: 700 }}>{log.weight} {program.units === "metric" ? "kg" : "lbs"}</span>}
+                  </div>
+                  <div style={{ fontSize: 11, color: C.sub, display: "flex", gap: 10, flexWrap: "wrap" }}>
+                    {log.sleep && <span>😴 {log.sleep}</span>}
+                    {log.energy && <span>⚡ {log.energy}</span>}
+                    {log.soreness && <span>💪 {log.soreness}</span>}
+                  </div>
+                  {log.notes && <div style={{ fontSize: 12, color: C.muted, marginTop: 4 }}>{log.notes}</div>}
+                </div>
+              );
+            })}
+            {Object.keys(progressLogs).length === 0 && <div style={{ textAlign: "center", color: C.sub, fontSize: 13, padding: 16 }}>No logs yet</div>}
+          </div>
+        )}
+
+        {/* Meal history */}
+        {historyView === "meals" && (
+          <div style={{ marginTop: 10 }}>
+            {Object.keys(foodLog || {}).sort().reverse().slice(0, 14).map(d => {
+              const dayMeals = foodLog[d]?.meals || [];
+              const totals = dayMeals.reduce((a, m) => ({ cal: a.cal + (m.calories || 0), prot: a.prot + (m.protein || 0) }), { cal: 0, prot: 0 });
+              return (
+                <div key={d} style={{ background: C.cardAlt, borderRadius: 10, padding: "10px 14px", marginBottom: 6 }}>
+                  <div style={{ display: "flex", justifyContent: "space-between" }}>
+                    <span style={{ color: C.text, fontSize: 13, fontWeight: 600 }}>{d}</span>
+                    <span style={{ color: C.sub, fontSize: 12 }}>{totals.cal} cal • {totals.prot}g protein</span>
+                  </div>
+                  {dayMeals.length > 0 && <div style={{ fontSize: 11, color: C.muted, marginTop: 4 }}>{dayMeals.map(m => m.name).join(", ")}</div>}
+                </div>
+              );
+            })}
+            {Object.keys(foodLog || {}).length === 0 && <div style={{ textAlign: "center", color: C.sub, fontSize: 13, padding: 16 }}>No meals logged yet</div>}
+          </div>
+        )}
+
+        {/* Workout history */}
+        {historyView === "workouts" && (
+          <div style={{ marginTop: 10 }}>
+            {Object.keys(workoutLogs).sort().reverse().slice(0, 20).map(k => {
+              const data = workoutLogs[k];
+              const doneSets = Object.values(data).filter(s => s?.done).length;
+              const splitName = k.split("-").slice(3).join("-") || k;
+              const dateStr = k.split("-").slice(0, 3).join("-");
+              return (
+                <div key={k} style={{ background: C.cardAlt, borderRadius: 10, padding: "10px 14px", marginBottom: 6 }}>
+                  <div style={{ display: "flex", justifyContent: "space-between" }}>
+                    <span style={{ color: C.text, fontSize: 13, fontWeight: 600 }}>{splitName}</span>
+                    <span style={{ color: C.sub, fontSize: 12 }}>{dateStr}</span>
+                  </div>
+                  <div style={{ fontSize: 12, color: C.sub, marginTop: 2 }}>{doneSets} sets completed{data._notes ? ` • "${data._notes}"` : ""}</div>
+                </div>
+              );
+            })}
+            {Object.keys(workoutLogs).length === 0 && <div style={{ textAlign: "center", color: C.sub, fontSize: 13, padding: 16 }}>No workouts logged yet</div>}
+          </div>
+        )}
+      </div>
+
       {/* Danger zone */}
       <button onClick={() => { if (confirm("Reset all data? This can't be undone.")) onReset(); }}
         style={{ width: "100%", padding: 14, borderRadius: 10, border: `1px solid ${C.red}40`, background: C.red + "10",
@@ -1225,30 +1405,21 @@ function CoachBubble({ program, workoutLogs, foodLog, progressLogs, C }) {
     const progressDates = Object.keys(progressLogs).sort().reverse().slice(0, 7);
     const recentWeights = progressDates.map(d => ({ date: d, weight: progressLogs[d]?.weight })).filter(w => w.weight);
 
-    return `You are the Reforged Coach, an AI fitness coach built into the Reforged app. Be concise, encouraging, and actionable. Use the user's data to give personalized advice. Keep responses under 150 words unless they ask for detail.
+    return `You are the Reforged Coach — a concise AI fitness coach inside the Reforged app.
 
-USER PROFILE:
-- Name: ${u.name || "User"}, Age: ${u.age}, Sex: ${u.sex}
-- Weight: ${u.weight} ${program.units === "metric" ? "kg" : "lbs"}
-- Goal: ${u.goal}, Experience: ${u.experience}
-- Injuries: ${(u.injuries || []).join(", ") || "None"}
-- Training: ${(u.gym_days || []).length} days/week (${(u.gym_days || []).join(", ")})
-- Gym: ${u.gym_access}
+RESPONSE RULES:
+- Keep responses under 80 words. Be direct and actionable.
+- NEVER use bullet points, asterisks, or markdown formatting. Write in short plain sentences or paragraphs only.
+- NEVER use * or ** for emphasis. Just write normally.
+- Use the user's actual data below to personalize advice.
+- Be encouraging but honest. Don't pad responses with filler.
+- If they ask a simple question, give a simple answer.
 
-MACRO TARGETS: ${program.macros.calories} cal | ${program.macros.protein}g protein | ${program.macros.carbs}g carbs | ${program.macros.fat}g fat
-
-TODAY'S NUTRITION: ${todayFood.length > 0 ? `${foodTotals.cal} cal, ${foodTotals.prot}g protein, ${foodTotals.carbs}g carbs, ${foodTotals.fat}g fat logged (${todayFood.map(m => m.name).join(", ")})` : "Nothing logged yet"}
-
-TODAY'S CHECK-IN: ${todayProgress.weight ? `Weight: ${todayProgress.weight}` : "No weight"} | Sleep: ${todayProgress.sleep || "N/A"} | Energy: ${todayProgress.energy || "N/A"} | Soreness: ${todayProgress.soreness || "N/A"}
-
-RECENT WEIGHT TREND: ${recentWeights.length > 0 ? recentWeights.map(w => `${w.date}: ${w.weight}`).join(", ") : "No data yet"}
-
-RECENT WORKOUTS: ${recentWorkouts.length > 0 ? recentWorkouts.map(([key, data]) => {
-      const doneSets = Object.values(data).filter(s => s?.done).length;
-      return `${key} (${doneSets} sets completed)`;
-    }).join("; ") : "No workouts logged yet"}
-
-PROGRAM SPLITS: ${program.splits.map(s => `${s.name} (${s.focus})`).join(", ")}`;
+USER: ${u.name || "User"}, ${u.age}yo ${u.sex}, ${u.weight}${program.units === "metric" ? "kg" : "lbs"}, Goal: ${u.goal}, Experience: ${u.experience}, Injuries: ${(u.injuries || []).join(", ") || "None"}
+MACROS: ${program.macros.calories}cal / ${program.macros.protein}g protein / ${program.macros.carbs}g carbs / ${program.macros.fat}g fat
+TODAY'S FOOD: ${todayFood.length > 0 ? `${foodTotals.cal}cal, ${foodTotals.prot}g protein (${todayFood.map(m => m.name).join(", ")})` : "Nothing logged"}
+TODAY: Sleep ${todayProgress.sleep || "N/A"}, Energy ${todayProgress.energy || "N/A"}, Soreness ${todayProgress.soreness || "N/A"}
+SPLITS: ${program.splits.map(s => s.name).join(", ")}`;
   };
 
   const sendMessage = async (text) => {
@@ -1268,7 +1439,7 @@ PROGRAM SPLITS: ${program.splits.map(s => `${s.name} (${s.focus})`).join(", ")}`
 
       const payload = {
         model: "claude-sonnet-4-20250514",
-        max_tokens: 1000,
+        max_tokens: 300,
         system: buildContext(),
         messages: apiMessages,
       };
@@ -1279,7 +1450,9 @@ PROGRAM SPLITS: ${program.splits.map(s => `${s.name} (${s.focus})`).join(", ")}`
         body: JSON.stringify(payload),
       });
       const data = await response.json();
-      const assistantText = data.content?.map(b => b.type === "text" ? b.text : "").join("") || "Sorry, I couldn't process that. Try again!";
+      let assistantText = data.content?.map(b => b.type === "text" ? b.text : "").join("") || "Sorry, I couldn't process that. Try again!";
+      // Strip markdown formatting
+      assistantText = assistantText.replace(/\*\*/g, "").replace(/\*/g, "").replace(/^[-•]\s/gm, "→ ").replace(/^#{1,3}\s/gm, "");
       setMessages(prev => [...prev, { role: "assistant", text: assistantText }]);
       setChatHistory(prev => [...prev, { role: "user", content: userMsg }, { role: "assistant", content: assistantText }]);
     } catch (err) {
@@ -1496,6 +1669,12 @@ export default function App() {
     setScreen("welcome");
   };
 
+  const totalWorkouts = Object.keys(workoutLogs).length;
+  const streakCount = (() => { let s = 0; const dates = [...new Set(Object.keys(workoutLogs).map(k => k.split("-").slice(0,3).join("-")))].sort().reverse(); for (let i = 0; i < dates.length; i++) { const d = new Date(dates[i]); const exp = new Date(); exp.setDate(exp.getDate() - i); if (d.toISOString().split("T")[0] === exp.toISOString().split("T")[0]) s++; else break; } return s; })();
+  const latestWeight = (() => { const dates = Object.keys(progressLogs).sort().reverse(); for (const d of dates) { if (progressLogs[d]?.weight) return parseFloat(progressLogs[d].weight); } return program.user?.weight || null; })();
+  const [profilePic, setProfilePic] = useState(null);
+  useEffect(() => { DB.get("profilePic").then(v => v && setProfilePic(v)); }, []);
+
   const tabs = [
     { key: "workout", label: "Workout", icon: "🏋️" },
     { key: "meals", label: "Meals", icon: "🍽️" },
@@ -1511,17 +1690,27 @@ export default function App() {
 
   if (!program) return null;
 
+  const targetW = program.user?.targetWeight || null;
+  const unitLabel = program.units === "metric" ? "kg" : "lbs";
+
   return (
     <div style={{ maxWidth: 480, margin: "0 auto", minHeight: "100vh", background: C.bg, fontFamily: "'SF Pro Display', -apple-system, sans-serif" }}>
       {timerTime && <RestTimer seconds={timerTime} onClose={() => setTimerTime(null)} C={C} />}
 
-      {/* Header */}
-      <div style={{ padding: "14px 20px", display: "flex", justifyContent: "space-between", alignItems: "center",
+      {/* Header with profile */}
+      <div style={{ padding: "12px 20px", display: "flex", alignItems: "center", gap: 12,
         borderBottom: `1px solid ${C.border}`, background: C.card }}>
-        <div>
-          <span style={{ fontSize: 18, fontWeight: 800, background: C.grad, WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent" }}>REFORGED</span>
+        <button onClick={() => setTab("settings")} style={{ width: 42, height: 42, borderRadius: "50%", background: C.accent + "20",
+          border: `2px solid ${C.accent}`, fontSize: 22, display: "flex", alignItems: "center", justifyContent: "center",
+          cursor: "pointer", flexShrink: 0 }}>{profilePic || "👤"}</button>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ fontSize: 16, fontWeight: 800, color: C.text, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{program.user?.name || "User"}</div>
+          <div style={{ display: "flex", gap: 10, fontSize: 11, color: C.sub, marginTop: 2 }}>
+            <span>🔥 {streakCount}d streak</span>
+            {latestWeight && <span>⚖️ {latestWeight}{unitLabel}{targetW ? ` → ${targetW}${unitLabel}` : ""}</span>}
+          </div>
         </div>
-        <div style={{ fontSize: 12, color: C.sub }}>Week {program.weekNum || 1}</div>
+        <span style={{ fontSize: 14, fontWeight: 800, background: C.grad, WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent" }}>REFORGED</span>
       </div>
 
       {/* Tab content */}
@@ -1531,7 +1720,7 @@ export default function App() {
         {tab === "progress" && <ProgressTab progressLogs={progressLogs} setProgressLogs={setProgressLogs} program={program} workoutLogs={workoutLogs} C={C} />}
         {tab === "schedule" && <ScheduleTab program={program} workoutLogs={workoutLogs} C={C} />}
         {tab === "settings" && <SettingsTab program={program} setProgram={setProgram} onReset={handleReset}
-          workoutLogs={workoutLogs} progressLogs={progressLogs} theme={theme} setTheme={setTheme} C={C} />}
+          workoutLogs={workoutLogs} progressLogs={progressLogs} foodLog={foodLog} theme={theme} setTheme={setTheme} C={C} />}
       </div>
 
       {/* Reforged Coach floating bubble */}
